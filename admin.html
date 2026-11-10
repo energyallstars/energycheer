@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Energy All Stars · Recepción</title>
 <meta name="robots" content="noindex, nofollow">
-<meta name="description" content="Recepción del club: pagos, cartera y deportistas.">
+<meta name="description" content="Recepción del club: pagos, cartera, deportistas y coaches.">
 <meta property="og:title" content="Energy All Stars · Recepción">
-<meta property="og:description" content="Recepción del club: pagos, cartera y deportistas.">
+<meta property="og:description" content="Recepción del club: pagos, cartera, deportistas y coaches.">
 <meta name="theme-color" content="#12051f">
 <link rel="manifest" href="manifest-admin.json">
 <link rel="icon" href="admin-192.png">
@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Recepción">
+<meta name="apple-mobile-web-app-title" content="Energy Recepción">
 <style>
   :root{--morado:#2a1259;--morado2:#4b1fa3;--rosa:#e6258a;--fondo:#f4f2f8;--txt:#1d1530;--gris:#6b6480;--borde:#e2dcef;
         --ok:#13895b;--okbg:#e5f5ed;--warn:#9a6b00;--warnbg:#fff4d6;--err:#c62828;--errbg:#fdecea}
@@ -114,6 +114,7 @@
   #login .logo{width:min(70vw,300px)}
   .top{background:linear-gradient(90deg,#12051f,#2a1259)!important}
   .top .logo{width:58px;flex:none;margin:-6px 0}
+  .foto-coach{border-radius:50%;background:#ece6f8 center/cover no-repeat;color:var(--morado2);font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;font-size:15px}
   #aviso{max-width:1360px;margin:0 auto;padding:0 18px}
   .cumple-hoy{display:flex;gap:14px;align-items:center;background:#fff0f8;border:1px solid #f3a6cf;border-radius:14px;padding:12px 16px;margin-top:14px;line-height:1.9}
   .cumple-hoy .pastel{font-size:34px}
@@ -173,6 +174,7 @@
     <button data-v="cartera">Cartera</button>
     <button data-v="pagos">Comprobantes <span class="badge" id="bPend">0</span></button>
     <button data-v="deportistas">Deportistas <span class="badge oculto" id="bIns">0</span></button>
+    <button data-v="coaches">Coaches <span class="badge oculto" id="bEnt">0</span></button>
     <button data-v="importar">Importar</button>
   </nav>
   <div id="aviso"></div>
@@ -1492,7 +1494,7 @@ function fallo(e) { toast(e.message || String(e), true); }
 function opciones(arr, sel, vacio) { return (vacio !== undefined ? '<option value="">' + esc(vacio) + '</option>' : '') + arr.map(x => { const v = Array.isArray(x) ? x[0] : x, t = Array.isArray(x) ? x[1] : x; return '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join(''); }
 function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 function tel10(t) { return String(t || '').replace(/\D/g, '').slice(-10); }
-function depPorId(id) { return D.deportistas.find(x => x.id === id); }
+function depPorId(id) { return D.deportistas.find(x => x.id === id) || (D.entrenadores || []).find(x => x.id === id); }
 function etiquetaDep(d) { return d.nombre + (d.documento ? ' · ' + d.documento : '') + (d.equipo ? ' · ' + d.equipo : ''); }
 
 /* ======================= sesión ======================= */
@@ -1506,7 +1508,8 @@ function entrar() {
 function salir() { PIN = ''; try { sessionStorage.removeItem('ec_pin'); } catch (e) {} $('app').classList.add('oculto'); $('login').classList.remove('oculto'); $('pin').value = ''; }
 function cargar() {
   return api('adminDatos', PIN).then(d => {
-    D = d; indexar();
+    Object.keys(AS_CACHE).forEach(k => delete AS_CACHE[k]);
+    D = d; D.entrenadores = D.entrenadores || []; D.cuentas = D.cuentas || []; indexar();
     if (!F.mes) F.mes = D.config.mesActual;
     $('marca').innerHTML = esc(D.config.club) + '<small>RECEPCIÓN</small>';
     $('lHoja').href = D.urlHoja || '#'; $('lCarpeta').href = D.urlCarpeta || '#';
@@ -1559,14 +1562,16 @@ function pintar() {
   $('bPend').textContent = pendientes().length;
   const ins = D.deportistas.filter(d => d.estado === 'Por revisar').length;
   $('bIns').textContent = ins; $('bIns').classList.toggle('oculto', !ins);
+  const pe = D.cuentas.filter(c => c.estado === 'Por revisar').length + D.entrenadores.filter(e => e.estado === 'Por revisar').length;
+  $('bEnt').textContent = pe; $('bEnt').classList.toggle('oculto', !pe);
   pintarAvisoCumple();
-  ({ resumen: vResumen, cartera: vCartera, pagos: vPagos, deportistas: vDeportistas, importar: vImportar })[VISTA]();
+  ({ coaches: vCoaches, resumen: vResumen, cartera: vCartera, pagos: vPagos, deportistas: vDeportistas, importar: vImportar })[VISTA]();
 }
 /* ======================= CUMPLEAÑOS ======================= */
 function proximosCumple(dias) {
   const h = (D.config.hoy || '').split('-').map(Number); if (h.length < 3) return [];
   const base = Date.UTC(h[0], h[1] - 1, h[2]), bis = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0, out = [];
-  activas().forEach(d => {
+  activas().concat(D.entrenadores.filter(e => e.estado === 'Activo').map(e => { e.esCoach = true; e.equipo = 'Coach'; return e; })).forEach(d => {
     const m = String(d.fechaNacimiento || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if (!m) return;
     const ny = +m[1], nm = +m[2], nd = +m[3];
     const fecha = y => Date.UTC(y, nm - 1, (nm === 2 && nd === 29 && !bis(y)) ? 28 : nd);
@@ -2207,11 +2212,168 @@ function importarPagos() {
   }).catch(e => { fallo(e); if ($('impGo')) $('impGo').disabled = false; });
 }
 
+
+/* ======================= COACHES ======================= */
+const ARCH_COACH = [['archFoto', 'Foto'], ['archDocumento', 'Documento de identidad'], ['archRut', 'RUT'], ['archHojaVida', 'Hoja de vida'], ['archCertificados', 'Certificados'], ['archBancaria', 'Certificación bancaria']];
+F.estadoCC = 'pendientes'; F.estadoEnt = '';
+function chipCC(e) { return '<span class="chip ' + ({ 'Por revisar': 'verificar', 'Aprobada': 'revisar', 'Pagada': 'Aprobado', 'Rechazada': 'Rechazado' }[e] || 'gris') + '">' + esc(e) + '</span>'; }
+function coachPorId(id) { return D.entrenadores.find(x => x.id === id); }
+function fotoMini(e, tam) { return '<div class="foto-coach" data-foto="' + esc(lista(e.archFoto)[0] || '') + '" style="width:' + tam + 'px;height:' + tam + 'px">' + esc((e.nombre || '?').trim().charAt(0)) + '</div>'; }
+const FOTOS = {};
+function cargarFotos(raiz) {
+  (raiz || document).querySelectorAll('[data-foto]').forEach(el => {
+    const id = el.dataset.foto; if (!id) return;
+    const poner = src => { el.style.backgroundImage = 'url("' + src + '")'; el.textContent = ''; };
+    if (FOTOS[id]) return poner(FOTOS[id]);
+    api('adminVerArchivo', PIN, id).then(a => { FOTOS[id] = 'data:' + a.mime + ';base64,' + a.data; poner(FOTOS[id]); }).catch(() => {});
+  });
+}
+function vCoaches() {
+  const cs = D.cuentas, ents = D.entrenadores;
+  const porRev = cs.filter(c => c.estado === 'Por revisar'), aprob = cs.filter(c => c.estado === 'Aprobada');
+  const mes = D.config.mesActual, pagadoMes = cs.filter(c => c.estado === 'Pagada' && (c.fechaPago || '').slice(0, 7) === mes).reduce((s, c) => s + (Number(c.valor) || 0), 0);
+  const filtro = F.estadoCC === 'pendientes' ? c => c.estado === 'Por revisar' || c.estado === 'Aprobada' : c => !F.estadoCC || c.estado === F.estadoCC;
+  const filas = cs.filter(filtro).sort((x, y) => y.fechaRegistro.localeCompare(x.fechaRegistro));
+  const lista2 = ents.filter(e => !F.estadoEnt || e.estado === F.estadoEnt).sort((x, y) => x.nombre.localeCompare(y.nombre));
+  $('vista').innerHTML =
+    '<div class="tarjetas">' + tarjeta('Coaches activos', ents.filter(e => e.estado === 'Activo').length, '') +
+      tarjeta('Cuentas por revisar', porRev.length, 'warn', "F.estadoCC='Por revisar';pintar()") +
+      tarjeta('Aprobadas por pagar', pesos(aprob.reduce((s, c) => s + (Number(c.valor) || 0), 0)), 'err', "F.estadoCC='Aprobada';pintar()") +
+      tarjeta('Pagado en ' + nMes(mes).split(' ')[0], pesos(pagadoMes), 'ok') +
+      (ents.some(e => e.estado === 'Por revisar') ? tarjeta('Registros por revisar', ents.filter(e => e.estado === 'Por revisar').length, 'warn', "F.estadoEnt='Por revisar';pintar()") : '') + '</div>' +
+    '<h3>Cuentas de cobro</h3><div class="filtros"><select id="fCC">' + opciones([['pendientes', 'Pendientes (por revisar y por pagar)'], ['Por revisar', 'Por revisar'], ['Aprobada', 'Aprobadas por pagar'], ['Pagada', 'Pagadas'], ['Rechazada', 'Rechazadas']], F.estadoCC, 'Todas') + '</select></div>' +
+    '<div class="panel"><table><thead><tr><th>Recibida</th><th>Coach</th><th>Mes</th><th class="num">Clases</th><th class="num">Valor</th><th>Estado</th><th></th></tr></thead><tbody>' +
+    filas.map(c => { const e = coachPorId(c.entId) || {};
+      return '<tr class="clic" data-cc="' + esc(c.id) + '"><td class="sub">' + esc(c.fechaRegistro) + '</td><td><div style="display:flex;gap:10px;align-items:center">' + fotoMini(e, 36) + '<div><b>' + esc(c.coach) + '</b><div class="sub">' + esc(lista(c.equipos).join(', ')) + '</div></div></div></td>' +
+        '<td>' + esc(nMes(c.periodo)) + '</td><td class="num">' + esc(c.clases) + '</td><td class="num"><b>' + pesos(c.valor) + '</b></td><td>' + chipCC(c.estado) + (c.fechaPago ? '<div class="sub">' + esc(c.fechaPago) + '</div>' : '') + '</td><td class="acc">' + (c.archivoId ? '🧾' : '') + '</td></tr>'; }).join('') +
+    '</tbody></table>' + (filas.length ? '' : '<div class="vacio">No hay cuentas de cobro con este filtro</div>') + '</div>' +
+    '<h3>Asistencia</h3><div class="filtros"><b>Mes:</b><select id="fAsMes">' + opciones(D.config.meses.filter(m => m <= D.config.mesActual).reverse().map(m => [m, nMes(m)]), F.asMes || D.config.mesActual) + '</select>' +
+    '<select id="fAsEq">' + opciones(D.config.equipos, F.asEq || D.config.equipos[0]) + '</select><button class="btn sec" id="bAsVer">Ver asistencia</button></div><div id="asTabla"></div>' +
+    '<h3>Coaches</h3><div class="filtros"><select id="fEnt">' + opciones([['Activo', 'Activos'], ['Por revisar', 'Registros por revisar'], ['Inactivo', 'Inactivos']], F.estadoEnt, 'Todos') + '</select><span class="esp"></span><button class="btn" onclick="modalCoach()">➕ Nuevo coach</button></div>' +
+    '<div class="panel"><table><thead><tr><th>Coach</th><th>Documento</th><th>Rol</th><th>Equipos</th><th>Celular</th><th>Cumpleaños</th><th>Estado</th></tr></thead><tbody>' +
+    lista2.map(e => { const falta = !e.archDocumento ? 'documento' : !e.archFoto ? 'foto' : '';
+      return '<tr class="clic" data-ent="' + esc(e.id) + '"><td><div style="display:flex;gap:10px;align-items:center">' + fotoMini(e, 40) + '<div><b>' + esc(e.nombre) + '</b>' + (falta ? '<div class="sub" style="color:var(--warn)">⚠️ Falta ' + falta + '</div>' : '') + '</div></div></td>' +
+        '<td>' + esc(e.tipoDoc) + ' ' + esc(e.documento) + '</td><td>' + esc(e.rol) + '</td><td class="sub">' + esc(lista(e.equipos).join(', ')) + '</td><td>' + esc(e.telefono) + '</td>' +
+        '<td class="sub">' + (e.fechaNacimiento ? esc(Number(e.fechaNacimiento.slice(8, 10)) + ' ' + NOMBRES_MES[Number(e.fechaNacimiento.slice(5, 7)) - 1].slice(0, 3).toLowerCase()) : '—') + '</td>' +
+        '<td><span class="chip ' + (e.estado === 'Activo' ? 'Activa' : e.estado === 'Por revisar' ? 'revisar' : 'Inactiva') + '">' + esc(e.estado) + '</span></td></tr>'; }).join('') +
+    '</tbody></table>' + (lista2.length ? '' : '<div class="vacio">Aún no hay coaches. Comparte el enlace de coaches (botón «Links para papás») o agrégalos con «Nuevo coach».</div>') + '</div>';
+  $('fCC').onchange = e => { F.estadoCC = e.target.value; pintar(); };
+  $('fEnt').onchange = e => { F.estadoEnt = e.target.value; pintar(); };
+  document.querySelectorAll('tr[data-cc]').forEach(tr => tr.onclick = () => modalCuenta(tr.dataset.cc));
+  $('bAsVer').onclick = () => { F.asMes = $('fAsMes').value; F.asEq = $('fAsEq').value; verAsistencia(); };
+  if (F.asMes) verAsistencia();
+  document.querySelectorAll('tr[data-ent]').forEach(tr => tr.onclick = () => modalCoach(tr.dataset.ent));
+  cargarFotos($('vista'));
+}
+const AS_CACHE = {};
+function verAsistencia() {
+  const mes = F.asMes || D.config.mesActual, eq = F.asEq || D.config.equipos[0], box = $('asTabla');
+  box.innerHTML = '<div class="sub">Cargando…</div>';
+  (AS_CACHE[mes] ? Promise.resolve(AS_CACHE[mes]) : api('adminAsistencia', PIN, mes).then(r => (AS_CACHE[mes] = r))).then(rows => {
+    const del = rows.filter(r => r.equipo === eq), fechas = Array.from(new Set(del.map(r => r.fecha))).sort();
+    const deps = D.deportistas.filter(d => d.equipo === eq && d.estado === 'Activa').sort((x, y) => x.nombre.localeCompare(y.nombre));
+    if (!fechas.length) { box.innerHTML = '<div class="panel"><div class="vacio">Sin asistencia registrada para ' + esc(eq) + ' en ' + esc(nMes(mes)) + '.</div></div>'; return; }
+    const sym = { Presente: '<b style="color:var(--ok)">✓</b>', Tarde: '<b style="color:var(--warn)">T</b>', Ausente: '<b style="color:var(--err)">✗</b>', Excusa: '<b style="color:var(--morado2)">E</b>' };
+    const idx = {}; del.forEach(r => idx[r.depId + '|' + r.fecha] = r.estado);
+    const coaches = Array.from(new Set(del.map(r => r.coach))).join(', ');
+    box.innerHTML = '<div class="sub" style="margin-bottom:6px">' + fechas.length + ' clases registradas · ' + esc(coaches) + '</div><div class="panel"><table><thead><tr><th>Deportista</th>' + fechas.map(f => '<th class="num">' + Number(f.slice(8)) + '</th>').join('') + '<th class="num">Asistencia</th></tr></thead><tbody>' +
+      deps.map(d => { let pres = 0, tot = 0; const celdas = fechas.map(f => { const e = idx[d.id + '|' + f]; if (e) { tot++; if (e === 'Presente' || e === 'Tarde') pres++; } return '<td class="num">' + (e ? sym[e] : '<span class="sub">·</span>') + '</td>'; }).join('');
+        const pct = tot ? Math.round(pres * 100 / tot) : null;
+        return '<tr><td><b>' + esc(d.nombre) + '</b></td>' + celdas + '<td class="num"><b style="color:' + (pct === null ? 'var(--gris)' : pct >= 80 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--err)') + '">' + (pct === null ? '—' : pct + '%') + '</b></td></tr>'; }).join('') +
+      '</tbody></table></div><div class="sub" style="margin-top:6px">✓ presente · T tarde · ✗ ausente · E excusa</div>';
+  }).catch(e => { box.innerHTML = ''; fallo(e); });
+}
+function linkPagoCoach(c) {
+  const e = coachPorId(c.entId); if (!e || !e.telefono) return '';
+  const txt = plantilla(D.config.mensajePagoCoach || 'Hola {nombre}, te confirmamos el pago de {periodo} por {valor}.\n{firma}', { nombre: e.nombre, periodo: nMes(c.periodo), clases: c.clases, valor: pesos(c.valor), firma: D.config.firma || '' });
+  return '<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/' + telWa(e.telefono) + '?text=' + encodeURIComponent(txt) + '">💬 Confirmar pago al coach</a>';
+}
+function modalCuenta(id) {
+  const c = D.cuentas.find(x => x.id === id), e = coachPorId(c.entId) || {};
+  abrir('<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">' + fotoMini(e, 64) + '<div><h2 style="margin:0">Cuenta de cobro · ' + esc(nMes(c.periodo)) + '</h2><div class="sub">' + esc(c.coach) + ' · ' + esc(e.rol || 'Coach') + '</div></div></div>' +
+    '<div class="info"><b>Clases dictadas</b><span>' + esc(c.clases) + (c.valorClase ? ' × ' + pesos(c.valorClase) : '') + '</span>' +
+    '<b>Total</b><span><b>' + pesos(c.valor) + '</b></span><b>Equipos</b><span>' + esc(lista(c.equipos).join(', ') || '—') + '</span>' +
+    (c.detalle ? '<b>Detalle</b><span style="white-space:pre-line">' + esc(c.detalle) + '</span>' : '') +
+    '<b>Según asistencia</b><span id="ccAs" class="sub">…</span>' +
+    '<b>Pagar a</b><span>' + esc(e.medioPago || '—') + ' ' + esc(e.cuentaPago || '') + '</span>' +
+    '<b>Recibida</b><span>' + esc(c.fechaRegistro) + '</span><b>Estado</b><span>' + chipCC(c.estado) + (c.fechaPago ? ' · pagada el ' + esc(c.fechaPago) + ' (' + esc(c.medioPagoReal) + ')' : '') + '</span>' +
+    (c.notas ? '<b>Notas</b><span>' + esc(c.notas) + '</span>' : '') + '</div>' +
+    '<div class="comp" id="compCC"></div>' +
+    '<div class="form" style="margin-top:12px">' + (c.estado !== 'Pagada' ? '<div><label>Fecha de pago</label><input type="date" id="ccFecha" value="' + esc(D.config.hoy) + '"></div><div><label>Medio de pago</label><select id="ccMedio">' + opciones(['Nequi', 'Daviplata', 'Transferencia', 'Efectivo'], e.medioPago && /nequi|davi/i.test(e.medioPago) ? e.medioPago : 'Transferencia') + '</select></div><div><label>Valor a pagar</label><input id="ccValor" inputmode="numeric" value="' + esc(Number(c.valor || 0).toLocaleString('es-CO')) + '"></div>' : '') +
+    '<div class="full"><label>Nota (opcional)</label><input id="ccNota" placeholder="Ej: se descuenta 1 clase no dictada"></div></div>' +
+    '<div class="pie-modal"><button class="btn sec" onclick="cerrar()">Cerrar</button>' +
+    (c.estado === 'Por revisar' || c.estado === 'Aprobada' ? '<button class="btn err" onclick="estadoCuenta(\'' + esc(c.id) + '\',\'Rechazada\')">✕ Rechazar</button>' : '') +
+    (c.estado === 'Por revisar' ? '<button class="btn ok" onclick="estadoCuenta(\'' + esc(c.id) + '\',\'Aprobada\')">✓ Aprobar</button>' : '') +
+    (c.estado === 'Por revisar' || c.estado === 'Aprobada' ? '<button class="btn" onclick="estadoCuenta(\'' + esc(c.id) + '\',\'Pagada\')">💰 Marcar pagada</button>' : '') +
+    (c.estado === 'Pagada' ? linkPagoCoach(c) : '') + '</div>');
+  (AS_CACHE[c.periodo] ? Promise.resolve(AS_CACHE[c.periodo]) : api('adminAsistencia', PIN, c.periodo).then(r => (AS_CACHE[c.periodo] = r))).then(rows => {
+    const n = new Set(rows.filter(r => r.entId === c.entId).map(r => r.fecha + '|' + r.equipo)).size;
+    if ($('ccAs')) $('ccAs').innerHTML = n + ' clases registradas en asistencia' + (n && Number(c.clases) !== n ? ' <b style="color:var(--warn)">(la cuenta dice ' + esc(c.clases) + ')</b>' : n ? ' ✓' : '');
+  }).catch(() => {});
+  if (c.archivoId) verArchivo(lista(c.archivoId)[0], $('compCC')); else $('compCC').innerHTML = '<div class="sub">Sin archivo adjunto.</div>';
+  cargarFotos($('modal'));
+}
+function estadoCuenta(id, estado) {
+  const extra = { notas: $('ccNota') ? $('ccNota').value.trim() : '' };
+  if (estado === 'Pagada') { extra.fechaPago = $('ccFecha').value; extra.medio = $('ccMedio').value; extra.valor = numero($('ccValor').value); }
+  api('adminCambiarEstadoCuenta', PIN, id, estado, extra).then(cambios => {
+    const c = D.cuentas.find(x => x.id === id); Object.assign(c, cambios); if (extra.notas) c.notas = (c.notas && c.notas !== extra.notas ? c.notas : '') ;
+    pintar(); toast('Cuenta de cobro: ' + estado.toLowerCase() + ' ✅');
+    if (estado === 'Pagada') modalCuenta(id); else cerrar();
+  }).catch(fallo);
+}
+let ARCH_C = {};
+function modalCoach(id, activar) {
+  ARCH_C = {};
+  const e = id ? coachPorId(id) : { estado: 'Activo', fechaIngreso: D.config.hoy, rol: 'Coach principal' };
+  const c = (k, l, tipo, full) => '<div' + (full ? ' class="full"' : '') + '><label>' + l + '</label><input id="e_' + k + '" type="' + (tipo || 'text') + '" value="' + esc(e[k] || '') + '"></div>';
+  const s = (k, l, ops, vacio) => '<div><label>' + l + '</label><select id="e_' + k + '">' + opciones(ops, e[k] || '', vacio) + '</select></div>';
+  const eqs = lista(e.equipos), hist = id ? D.cuentas.filter(x => x.entId === id).sort((x, y) => y.periodo.localeCompare(x.periodo)) : [];
+  const prox = id && e.fechaNacimiento ? proximosCumple(366).find(x => x.d.id === id) : null;
+  abrir('<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">' + fotoMini(e, 84) + '<div><h2 style="margin:0">' + (id ? esc(e.nombre) : 'Nuevo coach') + '</h2>' + (id ? '<div class="sub">' + esc(e.rol || 'Coach') + (prox ? ' · cumpleaños ' + (prox.dias === 0 ? '¡hoy! 🎂' : 'en ' + prox.dias + ' días') : '') + '</div>' : '') + '</div></div>' +
+    (activar || e.estado === 'Por revisar' ? '<p class="sub" style="color:var(--warn)">Registro enviado por el coach. Revisa los datos y documentos y cámbialo a «Activo».</p>' : '') +
+    '<div class="form">' + c('nombre', 'Nombre completo *', 'text', true) + s('tipoDoc', 'Tipo doc.', ['CC', 'CE', 'PPT', 'Pasaporte', 'TI']) + c('documento', 'N.º documento') +
+    c('fechaNacimiento', 'Fecha de nacimiento', 'date') + s('tipoSangre', 'Tipo de sangre', ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'], '—') +
+    c('telefono', 'Celular / WhatsApp', 'tel') + c('email', 'Correo', 'email') + c('direccion', 'Dirección') + c('eps', 'EPS') + c('arl', 'ARL') +
+    c('contactoEmergencia', 'Contacto de emergencia') + c('telefonoEmergencia', 'Celular de emergencia', 'tel') +
+    '</div><h4>En el club</h4><div class="form">' + s('rol', 'Rol', ['Coach principal', 'Coach asistente', 'Preparador físico', 'Coreógrafo', 'Otro']) +
+    s('estado', 'Estado', ['Activo', 'Por revisar', 'Inactivo']) + c('fechaIngreso', 'Fecha de ingreso', 'date') +
+    '<div><label>Valor por clase</label><input id="e_valorClase" inputmode="numeric" value="' + esc(e.valorClase || '') + '" placeholder="' + esc(D.config.valorClase || '') + '"></div>' +
+    s('medioPago', 'Medio de pago', ['Nequi', 'Daviplata', 'Cuenta de ahorros', 'Cuenta corriente', 'Efectivo'], '—') + c('cuentaPago', 'Número y banco') +
+    '<div><label>PIN de asistencia <span style="font-weight:400">(4 a 6 dígitos)</span></label><div style="display:flex;gap:6px"><input id="e_pinAsistencia" inputmode="numeric" value="' + esc(e.pinAsistencia || '') + '"><button type="button" class="btn mini sec" onclick="$(\'e_pinAsistencia\').value=String(Math.floor(100000+Math.random()*900000))">Generar</button></div></div>' +
+    '<div class="full"><label>Equipos</label><div class="meses" id="e_equipos">' + D.config.equipos.concat(eqs.filter(q => D.config.equipos.indexOf(q) < 0)).map(q => '<label><input type="checkbox" value="' + esc(q) + '"' + (eqs.indexOf(q) >= 0 ? ' checked' : '') + '><span>' + esc(q) + '</span></label>').join('') + '</div></div>' +
+    '<div class="full"><label>Observaciones</label><textarea id="e_observaciones" rows="2">' + esc(e.observaciones || '') + '</textarea></div>' +
+    (id ? '' : '<div class="full"><label style="display:flex;gap:8px;align-items:center;font-weight:400;color:var(--txt)"><input type="checkbox" id="e_aut" style="width:auto"> El coach autorizó el tratamiento de sus datos</label></div>') +
+    '</div><h4>Documentos</h4><div class="archs">' + ARCH_COACH.map(x => '<div class="arch"><b>' + x[1] + '</b>' + (e[x[0]] ? lista(e[x[0]]).map(f => '<a href="#" data-ver="' + esc(f) + '">Ver</a> ').join('') : '<span class="sub">No cargado</span>') +
+      '<div style="margin-top:6px"><input type="file" accept="image/*,application/pdf" data-subec="' + x[0] + '"></div></div>').join('') + '</div>' +
+    '<div class="comp" id="visorC" style="margin-top:10px"></div>' + (e.autorizaciones ? '<p class="sub">' + esc(e.autorizaciones) + '</p>' : '') +
+    (id ? '<h4>Cuentas de cobro</h4>' + (hist.length ? '<div class="panel"><table><tbody>' + hist.map(h => '<tr class="clic" data-hcc="' + esc(h.id) + '"><td>' + esc(nMes(h.periodo)) + '</td><td class="num">' + esc(h.clases) + ' clases</td><td class="num">' + pesos(h.valor) + '</td><td>' + chipCC(h.estado) + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="sub">Aún no ha enviado cuentas de cobro.</div>') : '') +
+    '<div class="pie-modal"><button class="btn sec" onclick="cerrar()">Cancelar</button>' + (id && e.pinAsistencia && e.telefono ? '<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/' + telWa(e.telefono) + '?text=' + encodeURIComponent('Hola ' + e.nombre + ' 👋\nEste es tu acceso al portal de coaches de ' + D.config.club + ' (asistencia y cuentas de cobro):\n' + urlsPadres().coaches + '\nDocumento: ' + e.documento + '\nPIN: ' + e.pinAsistencia + '\nNo compartas tu PIN.\n' + (D.config.firma || '')) + '">💬 Enviar acceso al coach</a>' : '') + (prox && prox.dias === 0 ? botonFelicitar(prox) : '') + '<button class="btn" id="eGuardar">' + (e.estado === 'Por revisar' ? 'Guardar' : 'Guardar') + '</button></div>');
+  if (activar || e.estado === 'Por revisar') $('e_estado').value = 'Activo';
+  cargarFotos($('modal')); activarFelicitar($('modal'));
+  document.querySelectorAll('[data-ver]').forEach(x => x.onclick = ev => { ev.preventDefault(); verArchivo(x.dataset.ver, $('visorC')); });
+  document.querySelectorAll('[data-hcc]').forEach(tr => tr.onclick = () => modalCuenta(tr.dataset.hcc));
+  document.querySelectorAll('[data-subec]').forEach(inp => inp.onchange = () => { const f = inp.files[0], k = inp.dataset.subec; delete ARCH_C[k]; if (!f) return; const r = new FileReader(); r.onload = () => ARCH_C[k] = { mime: f.type, nombre: f.name, data: r.result.split(',')[1] }; r.readAsDataURL(f); });
+  $('eGuardar').onclick = () => {
+    const o = { id: id || '', archivos: ARCH_C };
+    ['nombre', 'tipoDoc', 'documento', 'fechaNacimiento', 'tipoSangre', 'telefono', 'email', 'direccion', 'eps', 'arl', 'contactoEmergencia', 'telefonoEmergencia',
+      'rol', 'estado', 'fechaIngreso', 'medioPago', 'cuentaPago', 'observaciones', 'pinAsistencia'].forEach(k => o[k] = $('e_' + k).value.trim());
+    if (o.estado === 'Activo' && !o.pinAsistencia) o.pinAsistencia = String(Math.floor(100000 + Math.random() * 900000));
+    o.valorClase = $('e_valorClase').value.trim() ? numero($('e_valorClase').value) : '';
+    o.equipos = Array.from(document.querySelectorAll('#e_equipos input:checked')).map(x => x.value);
+    if (!id) o.autorizaDatos = $('e_aut').checked;
+    if (!o.nombre) return toast('El nombre es obligatorio.', true);
+    $('eGuardar').disabled = true;
+    api('adminGuardarEntrenador', PIN, o).then(() => { cerrar(); toast('Coach guardado ✅'); return cargar(); })
+      .catch(err => { fallo(err); if ($('eGuardar')) $('eGuardar').disabled = false; });
+  };
+}
+
 /* ======================= links ======================= */
 function urlsPadres() {
   const u = linkPadres(), sep = u.indexOf('?') >= 0 ? '&' : '?', g = D.urlApp || u;
   const admin = /github\.io/.test(u) ? u.split('?')[0].replace(/index\.html$/, '').replace(/\/?$/, '/') + 'admin.html' : g + (g.indexOf('?') >= 0 ? '&' : '?') + 'p=admin';
-  return { pago: u, ins: u + sep + 'p=inscripcion', admin: admin };
+  return { pago: u, ins: u + sep + 'p=inscripcion', coaches: u + sep + 'p=entrenadores', admin: admin };
 }
 function qrSrc(texto) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(QRLIB.svg(texto)); }
 function logoSrc() { const v = getComputedStyle(document.documentElement).getPropertyValue('--logo'); const m = v.match(/url\(["']?(.*?)["']?\)\s*$/); return m ? m[1] : ''; }
@@ -2222,6 +2384,7 @@ function modalLinks() {
   abrir('<h2>Enlaces y códigos QR para los papás</h2>' +
     '<div class="qrs">' + tarjeta('Subir pago', 'Comprobantes de mensualidad', U.pago, 'uPago') + tarjeta('Inscripción', 'Nuevas deportistas', U.ins, 'uIns') + '</div>' +
     '<p class="sub">Los papás escanean con la cámara del celular. No necesitan cuenta de Google ni espacio en su Drive.</p>' +
+    '<h3 style="margin-top:6px">Para los coaches</h3><div class="qrs" style="grid-template-columns:1fr">' + tarjeta('Coaches', 'Registro y cuentas de cobro (no se incluye en el afiche de papás)', U.coaches, 'uCoach') + '</div>' +
     '<div class="pie-modal" style="justify-content:space-between"><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="imprimirAfiche()">🖨️ Imprimir afiche</button><button class="btn wa" onclick="imagenAfiche()">🖼️ Imagen para WhatsApp</button></div><button class="btn sec" onclick="cerrar()">Listo</button></div>' +
     '<div id="afiImg"></div>' +
     '<details style="margin-top:14px"><summary class="sub" style="cursor:pointer">Enlace de recepción (solo para el club, nunca compartir)</summary><input readonly value="' + esc(U.admin) + '" onclick="this.select()" style="width:100%;margin-top:6px;padding:8px;border:1.5px solid var(--borde);border-radius:8px"></details>');
